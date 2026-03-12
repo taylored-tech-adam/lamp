@@ -1,11 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>FriendLight</title>
+  <meta charset="UTF-8">
+  <title>FriendLight Web</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --color-0: #808080; /* stale/none: gray */
+      --color-1: #ffd83b; /* yellow */
+      --color-2: #00c853; /* green */
+      --color-3: #00bcd4; /* teal-ish */
+      --color-4: #ff4fa3; /* pink */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #1f2933, #000000);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      color: #e5e7eb;
+    }
+
+    .card {
+      width: min(260px, 80vw);
+      aspect-ratio: 1 / 1;
+      border-radius: 32px;
+      background: rgba(15, 23, 42, 0.35);
+      box-shadow:
+        0 18px 50px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(148, 163, 184, 0.25);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+
+    .card::before {
+      /* sheen highlight */
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.35), transparent 55%),
+        radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.18), transparent 60%);
+      mix-blend-mode: screen;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 22px 60px rgba(0, 0, 0, 0.7),
+        0 0 0 1px rgba(191, 219, 254, 0.4);
+    }
+
+    .inner-circle {
+      width: 72%;
+      height: 72%;
+      border-radius: 28px;
+      background: var(--color-0);
+      box-shadow:
+        inset 0 0 0 1px rgba(15, 23, 42, 0.7),
+        inset 0 10px 25px rgba(255, 255, 255, 0.15),
+        0 18px 40px rgba(0, 0, 0, 0.6);
+      transition: background-color 300ms ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .value-label {
+      font-size: 1.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .status-label {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    .meta {
+      position: absolute;
+      bottom: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22c55e;
+      margin-right: 6px;
+    }
+
+    .dot.stale {
+      background: #f97316;
+    }
+
+    .dot.offline {
+      background: #ef4444;
+    }
+  </style>
 </head>
 <body>
-  <h1>FriendLight Control</h1>
-  <p>Hello from GitHub Pages.</p>
+  <div class="card" id="card">
+    <div class="inner-circle" id="inner">
+      <div class="value-label" id="valueLabel">—</div>
+      <div class="status-label" id="statusLabel">Waiting for data…</div>
+    </div>
+    <div class="meta">
+      <div id="ageLabel"><span class="dot offline" id="statusDot"></span>Offline</div>
+      <div id="timeLabel">—</div>
+    </div>
+  </div>
+
+  <script>
+    // ----- CONFIG: fill in your own values -----
+    const AIO_USERNAME = "YOUR_ADAFRUIT_USERNAME";
+    const AIO_FEED_KEY = "YOUR_FEED_KEY";
+    const AIO_KEY = "YOUR_AIO_KEY"; // WARNING: don't commit a real key to a public repo
+    const STALE_MINUTES = 20;
+    const POLL_MS = 5000;
+
+    const inner = document.getElementById("inner");
+    const valueLabel = document.getElementById("valueLabel");
+    const statusLabel = document.getElementById("statusLabel");
+    const ageLabel = document.getElementById("ageLabel");
+    const timeLabel = document.getElementById("timeLabel");
+    const statusDot = document.getElementById("statusDot");
+    const card = document.getElementById("card");
+
+    function colorForValue(v) {
+      switch (v) {
+        case 1: return getComputedStyle(document.documentElement).getPropertyValue("--color-1");
+        case 2: return getComputedStyle(document.documentElement).getPropertyValue("--color-2");
+        case 3: return getComputedStyle(document.documentElement).getPropertyValue("--color-3");
+        case 4: return getComputedStyle(document.documentElement).getPropertyValue("--color-4");
+        default: return getComputedStyle(document.documentElement).getPropertyValue("--color-0");
+      }
+    }
+
+    function updateUI(value, createdAtIso) {
+      const now = new Date();
+      const created = createdAtIso ? new Date(createdAtIso) : null;
+      let ageMinutes = null;
+
+      if (created && !isNaN(created.getTime())) {
+        ageMinutes = (now - created) / (1000 * 60);
+      }
+
+      const isStale = ageMinutes == null || ageMinutes > STALE_MINUTES;
+
+      // Background color
+      const color = isStale ? colorForValue(0) : colorForValue(value);
+      inner.style.backgroundColor = color;
+
+      // Value label
+      valueLabel.textContent = isStale || ![1, 2, 3, 4].includes(value) ? "—" : String(value);
+
+      // Status text
+      if (!created) {
+        statusLabel.textContent = "No data yet";
+      } else if (isStale) {
+        statusLabel.textContent = "Stale (> " + STALE_MINUTES + " min)";
+      } else {
+        statusLabel.textContent = "Active";
+      }
+
+      // Age + dot
+      if (!created) {
+        ageLabel.innerHTML = '<span class="dot offline" id="statusDot"></span>No data';
+      } else if (isStale) {
+        ageLabel.innerHTML = '<span class="dot stale" id="statusDot"></span>Stale';
+      } else {
+        ageLabel.innerHTML = '<span class="dot" id="statusDot"></span>Fresh';
+      }
+
+      // Local time label
+      if (created) {
+        timeLabel.textContent = created.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      } else {
+        timeLabel.textContent = "—";
+      }
+    }
+
+    async function fetchLastValue() {
+      const url = `https://io.adafruit.com/api/v2/${encodeURIComponent(AIO_USERNAME)}/feeds/${encodeURIComponent(AIO_FEED_KEY)}/data/last`;
+      try {
+        const resp = await fetch(url, {
+          headers: {
+            "X-AIO-Key": AIO_KEY
+          }
+        });
+        if (!resp.ok) {
+          console.error("AIO error", resp.status, resp.statusText);
+          statusLabel.textContent = "Error from Adafruit IO";
+          return;
+        }
+        const data = await resp.json();
+        // data.value is a string, created_at is ISO 8601
+        const vStr = data.value ?? "0";
+        const v = parseInt(vStr, 10) || 0;
+        const createdAt = data.created_at || null;
+        updateUI(v, createdAt);
+      } catch (err) {
+        console.error("Fetch failed", err);
+        statusLabel.textContent = "Network error";
+        ageLabel.innerHTML = '<span class="dot offline" id="statusDot"></span>Offline';
+      }
+    }
+
+    // Optional: clicking the card can force a refresh
+    card.addEventListener("click", () => {
+      fetchLastValue();
+    });
+
+    // Initial load + polling
+    fetchLastValue();
+    setInterval(fetchLastValue, POLL_MS);
+  </script>
 </body>
 </html>
