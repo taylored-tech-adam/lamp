@@ -1,26 +1,113 @@
-<script>
-async function refreshFriendlight() {
-  try {
-    const res = await fetch("http://12.191.8.210:5267/lamp");
-    const data = await res.json();
-    const level = Number(data.value || 0);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FriendLight</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #020617, #000000);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      color: #e5e7eb;
+    }
+    .glass-box {
+      width: min(90vw, 420px);
+      height: min(60vh, 260px);
+      border-radius: 24px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: radial-gradient(circle at top left,
+                  rgba(148, 163, 184, 0.15),
+                  rgba(15, 23, 42, 0.95));
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: box-shadow 0.4s ease, border-color 0.4s ease;
+    }
+    .status-label {
+      font-size: 0.85rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #9ca3af;
+      margin-bottom: 0.5rem;
+    }
+    .status-text {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .status-sub {
+      font-size: 0.95rem;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <div class="glass-box">
+    <div class="status-label">FriendLight</div>
+    <div class="status-text" id="status-text">Loading…</div>
+    <div class="status-sub" id="status-sub">Checking status</div>
+  </div>
 
-    const box = document.querySelector(".glass-box");
-    if (!box) return;
+  <script>
+    const FRIENDLIGHT_URL = "http://12.191.8.210:5267/lamp";
 
-    let color = "#4b5563";
-    if (level === 1) color = "#22c55e";
-    else if (level === 2) color = "#eab308";
-    else if (level === 3) color = "#f97316";
-    else if (level === 4) color = "#ef4444";
+    function levelToInfo(level) {
+      switch (level) {
+        case 1:
+          return { label: "Green", sub: "All clear", color: "#22c55e" };
+        case 2:
+          return { label: "Yellow", sub: "A bit busy", color: "#eab308" };
+        case 3:
+          return { label: "Orange", sub: "Heads down", color: "#f97316" };
+        case 4:
+          return { label: "Red", sub: "Do not disturb", color: "#ef4444" };
+        default:
+          return { label: "Unknown", sub: "No recent status", color: "#4b5563" };
+      }
+    }
 
-    box.style.boxShadow = `0 0 60px ${color}`;
-    box.style.borderColor = color;
-  } catch (e) {
-    console.error("FriendLight fetch failed", e);
-  }
-}
+    async function refreshFriendlight() {
+      const box = document.querySelector(".glass-box");
+      const statusText = document.getElementById("status-text");
+      const statusSub = document.getElementById("status-sub");
 
-refreshFriendlight();
-setInterval(refreshFriendlight, 5000);
-</script>
+      try {
+        const res = await fetch(FRIENDLIGHT_URL);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        const data = await res.json();
+        const level = Number(data.value || 0);
+        const info = levelToInfo(level);
+
+        statusText.textContent = info.label;
+        statusSub.textContent = info.sub;
+
+        box.style.boxShadow = `0 0 60px ${info.color}`;
+        box.style.borderColor = info.color;
+      } catch (e) {
+        statusText.textContent = "Offline";
+        statusSub.textContent = "Couldn’t reach FriendLight";
+        box.style.boxShadow = "0 0 40px rgba(15,23,42,0.8)";
+        box.style.borderColor = "rgba(148,163,184,0.4)";
+        console.error("FriendLight fetch failed", e);
+      }
+    }
+
+    refreshFriendlight();
+    setInterval(refreshFriendlight, 5000);
+  </script>
+</body>
+</html>
